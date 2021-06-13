@@ -34,6 +34,10 @@ def gcdownload_str(path):
     nparr = np.fromstring(e, np.uint8)
     return nparr
 
+def gcdownload_byt(path):
+    object_name_in_gcs_bucket = bucket.blob(path)
+    e = object_name_in_gcs_bucket.download_as_bytes()
+    return e
 
 def gcupload(path, f):
     b = io.BytesIO()

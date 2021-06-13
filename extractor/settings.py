@@ -27,7 +27,7 @@ SECRET_KEY = '@@*9cqwylqf$dqyud7*_=3rjese5g@8gatrjlsb#ua03uu*v&w'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['test-github-315318.df.r.appspot.com','localhost','127.0.0.1']
 
 
 # Application definition
@@ -130,8 +130,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.0/howto/static-files/
 
-STATIC_URL = '/static/'
-MEDIA_URL = '/media/'
+STATIC_URL = '/tmp/'
+MEDIA_URL = '/tmp/'
 
 TEMP_ROOT = os.path.join(BASE_DIR, 'media')
 TEMP_ROOT1 = 'media'

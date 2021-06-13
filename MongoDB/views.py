@@ -1,18 +1,19 @@
-import environ
-from django.db.models.base import Model
-from django.http import HttpResponse
+# import environ
+# from django.db.models.base import Model
+# from django.http import HttpResponse
 from django.http.response import JsonResponse
-from multiprocessing import Pool
-from rest_framework import request
-import pytesseract
-import cv2
+# from multiprocessing import Pool
+# from rest_framework import request
+from MongoDB.visionControl import consumeVision
+import shutil
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, status
 from MongoDB.serializers import ExtractSerializer, UserSerializer, ModelSerializer, FieldSerializer
 from MongoDB.models import User, Document, Field, File, ExtractFIle
-from MongoDB.bucketControl import gcdownload, gcupload, gcdownload_str, gcupload_Excel
-import pdf2image
+from MongoDB.bucketControl import gcdownload, gcupload, gcdownload_str, gcupload_Excel, gcdownload_byt
+from MongoDB.sendEmail import emailTrigger
+import pdf2image,io
 from django.conf import settings
 import os
 import uuid
@@ -30,38 +31,35 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 
-def emailtrigger(model, filepath, filename):
-    fromaddr = 'interltester@gmail.com'
-    toaddrs = 'shakthiprakash1509@gmail.com'
-    username = fromaddr
-    password = 'Welcome@1'
-    message = MIMEMultipart()
-    message['From'] = fromaddr
-    message['To'] = toaddrs
-    message['Subject'] = 'Extraction Results for ' + model
-    msg = "Please find the attachments of extraction results for " + model
-    message.attach(MIMEText(msg, 'plain'))
-    attach_file_name = filepath
-    attach_file = open(attach_file_name, 'rb')  # Open the file as binary mode
-    payload = MIMEApplication((attach_file).read(), Name=filename)
-    encoders.encode_base64(payload)  # encode the attachment
-    # add payload header with filename
-    payload['Content-Decomposition'] = 'attachment; filename="{}"'.format(
-        attach_file_name)
-    message.attach(payload)
-    # Create SMTP session for sending the mail
-    session = smtplib.SMTP('smtp.gmail.com', 587)  # use gmail with port
-    session.starttls()  # enable security
-    session.login(username, password)  # login with mail_id and password
-    text = message.as_string()
-    session.sendmail(fromaddr, toaddrs, text)
-    session.quit()
+def processData(input):
+    def assemble_word(word):
+        assembled_word=""
+        for symbol in word.symbols:
+            assembled_word+=symbol.text
+        return assembled_word
 
 
-env = environ.Env()
-environ.Env.read_env()
-pytesseract.pytesseract.tesseract_cmd = env('PYTESSARACT')
-
+    t={}
+    i = 0
+    for x in input.pages:
+        for x1 in x.blocks:
+            for x2 in x1.paragraphs:
+                for x3 in x2.words: 
+                    word = assemble_word(x3)
+                    ver = x3.bounding_box.vertices
+                    x1,y1,x2,y2=min(ver[0].x,ver[3].x),min(ver[0].y,ver[1].y),min(ver[1].x,ver[2].x),min(ver[2].y,ver[3].y)
+                    t[i] = [x1,y1,x2-x1,y2-y1,word]
+                    i = i + 1
+    
+    df = {'x':[],'y':[],'w':[],'h':[],'values':[]}
+    for x in t.values():
+    #     print(x)
+        df['x'].append(x[0])
+        df['y'].append(x[1])
+        df['w'].append(x[2])
+        df['h'].append(x[3])
+        df['values'].append(x[4])
+    return df
 
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
@@ -105,13 +103,36 @@ def savemodel(request):
             field.save()
             print('test', (field))
             success += 1
+
+    def getListOfFiles(dirName):
+            # create a list of file and sub directories 
+            # names in the given directory 
+            listOfFile = os.listdir(dirName)
+            allFiles = list()
+            # Iterate over all the entries
+            for entry in listOfFile:
+                # Create full path
+                fullPath = os.path.join(dirName, entry)
+                # If entry is a directory then get the list of files in this directory 
+                if os.path.isdir(fullPath):
+                    allFiles = allFiles + getListOfFiles(fullPath)
+                else:
+                    allFiles.append(fullPath)
+                        
+            return allFiles
+    remove = lambda x:shutil.rmtree(x)
+    for x in getListOfFiles(settings.TEMP_ROOT):
+        print(x)
+        os.remove(x)
+    for x in (os.listdir(settings.TEMP_ROOT)):
+        print(x)
+        remove(os.path.join(settings.TEMP_ROOT,x))
     return JsonResponse(data="Success " + str(success), safe=False)
 
 
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def text(request):
-    print(request.data)
     coordinates = request.data['coordinate']
 
     file = File.objects.get(modelname=request.data['modelname'])
@@ -120,12 +141,14 @@ def text(request):
     detail = detail.replace('""', ''''"''')
     # print(detail)
     df1_list = {}
+    
+    print(eval(detail))
     for n, x in eval(detail).items():
         df = x
         df1 = pd.DataFrame(df)
         df1_list[str(n+1)] = df1
         # print(df1.columns)
-    # print(df1_list)
+    print('check',df1_list)
     text = {}
 
     for n, x1 in coordinates.items():
@@ -177,8 +200,10 @@ def text(request):
                                 i_ = i['values'].replace('''"""''', '''"'"''')
                                 print(i_)
                                 text[label].append(
-                                    str({"page": n, "text": i_}))
-            # print(n, text[label])
+                                    str({"page": n, "text": i_, "postiton_x":k[1]['x'],"postiton_y":k[1]['y']}))
+        
+    # print(text.items())
+    # text =sorted(text.items(),key=lambda x:(eval(x)['postiton_y'],eval(x)['postiton_x']))
     print(text)
     return JsonResponse(data=text, safe=False)
 
@@ -216,31 +241,12 @@ def extractValesAll(request):
             text1['File name'].append(
                 str(filename))
             for n, x2 in enumerate(x_):
-                img = gcdownload_str(settings.UPLOAD_ROOT+'/'+x2)
-                img = cv2.imdecode(img, cv2.COLOR_BGR2RGB)
-                boxes = pytesseract.image_to_data(img)
-                t = {}
+                img = gcdownload_byt(settings.UPLOAD_ROOT+'/'+x2)
+                # img = cv2.imdecode(img, cv2.COLOR_BGR2RGB)
+                boxes = consumeVision(img)
                 i = 0
-                for x, b in enumerate(boxes.splitlines()):
-
-                    if x == 0:
-                        continue
-                    b = b.split()
-                    if len(b) == 12:
-                        x, y, w, h, text = int(b[6]), int(
-                            b[7]), int(b[8]), int(b[9]), b[11]
-                        t[i] = [x, y, w, h, text]
-                        i += 1
-                df = {'x': [], 'y': [], 'w': [], 'h': [], 'values': []}
-                for x in t.values():
-                    #     print(x)
-                    df['x'].append(x[0])
-                    df['y'].append(x[1])
-                    df['w'].append(x[2])
-                    df['h'].append(x[3])
-                    x_ = str(x[4]).replace('''"""''', '''"'"''')
-                    df['values'].append(x_)
-                df1 = pd.DataFrame(df)
+                df1 = processData(boxes)
+                df1 = pd.DataFrame(df1)
                 uniq_y = []
                 for x in (df1[['y', 'h']].values):
                     #     print(x,uniq_y)
@@ -293,8 +299,9 @@ def extractValesAll(request):
     print(text1)
     filename_xl = str(uuid.uuid4())+'.csv'
     pd.DataFrame(text1).to_csv(settings.TEMP_ROOT+'/' + filename_xl)
-    emailtrigger(model, settings.TEMP_ROOT+'/' + filename_xl, model+'.csv')
+    emailTrigger(model, settings.TEMP_ROOT+'/' + filename_xl, model+'.csv')
     gcupload_Excel(settings.TEMP_ROOT+'/' + filename_xl)
+    os.remove(settings.TEMP_ROOT+'/' + filename_xl)
     print(text1)
     return Response(data=filename_xl)
     # return Response(text)
@@ -314,14 +321,9 @@ def uploadfiles(request):
     )
     extract.save()
     file_list = []
-    path = (settings.UPLOAD_ROOT+'/' + str(
+    byte = gcdownload_byt(settings.UPLOAD_ROOT+'/'+str(
         extract.filename)[:-4]+'_folder'+'/'+extract.filename)
-    os.mkdir(settings.TEMP_ROOT+'/'+str(
-        extract.filename)[:-4]+'_folder')
-    gcdownload(path, settings.TEMP_ROOT+'/'+str(
-        extract.filename)[:-4]+'_folder'+'/'+extract.filename)
-    img = pdf2image.convert_from_path(settings.TEMP_ROOT+'\\'+str(
-        extract.filename)[:-4]+'_folder'+'/'+extract.filename)
+    img = pdf2image.convert_from_bytes(byte)
     for n, i in enumerate(img):
         # print(filename_img)
         gcupload(settings.UPLOAD_ROOT+'/'+str(extract.filename)[
@@ -345,76 +347,48 @@ def upload(request):
     )
     file.save()
     # print(file.filename)
-    # print(request.FILES['file'])
     file_list = []
     file_list1 = []
+    
     path = (settings.MEDIA_ROOT+'/' + str(
         file.filename)[:-4]+'_folder'+'/'+file.filename)
-    os.mkdir(settings.TEMP_ROOT+'/'+str(
-        file.filename)[:-4]+'_folder')
-    gcdownload(path, settings.TEMP_ROOT+'/'+str(
-        file.filename)[:-4]+'_folder'+'/'+file.filename)
-    img = pdf2image.convert_from_path(settings.TEMP_ROOT+'\\'+str(
-        file.filename)[:-4]+'_folder'+'/'+file.filename)
+    
+    # os.mkdir(settings.TEMP_ROOT+'/'+str(
+    #     file.filename)[:-4]+'_folder')
+    byte = gcdownload_byt(path)
+    img = pdf2image.convert_from_bytes(byte)
     path = os.path.join(
         settings.TEMP_ROOT + '\\'+str(file.filename)[:-4]+'_folder'+'\\'+file.filename)
+    if not os.path.isdir(path[:-4]):
+        os.makedirs(path[:-4])
     for n, i in enumerate(img):
-        # print(filename_img)
+        print(path[:-4])
         i.save(path[:-4]+'_'+str(n)+'.jpg', 'JPEG')
         gcupload(settings.MEDIA_ROOT+'/'+str(file.filename)[
             :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg', i)
         file_list.append(str(file.filename)[
                          :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg')
-
-        file_list1.append(str(file.filename)[
-            :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg')
+        file_list1.append(path[:-4]+'_'+str(n)+'.jpg')
     file.eachfile = file_list
-    # print(extract.filename)
-    # file.save()
-    # path = os.path.join(
-    #     settings.MEDIA_ROOT, str(file.filename)[:-4]+'_folder'+'\\'+file.filename)
-    # img = convert_from_path(path)
-    # for n, i in enumerate(img):
-    #     filename_img = path[:-4]+'_'+str(n)+'.jpg'
-    #     # print(filename_img)
-    #     i.save(filename_img, 'JPEG')
-    #     file_list.append(str(file.filename)[
-    #                      :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg')
-    # file.eachfile = file_list
     df_list = {}
 
-    # for n, x in enumerate(file_list):
-    #     img = cv2.imread(os.path.join(
-    #         settings.MEDIA_ROOT, x))
-    #     print(x)
-    for n, x in enumerate(file_list):
-        img = gcdownload_str(settings.MEDIA_ROOT+'/'+x)
-        img = cv2.imdecode(img, cv2.COLOR_BGR2RGB)
-        boxes = pytesseract.image_to_data(img)
-        t = {}
-        i = 0
-        for x, b in enumerate(boxes.splitlines()):
+    for n, x in enumerate(file_list1):
+        # img = gcdownload_byt(settings.MEDIA_ROOT+'/'+x)
+        with open(x, "rb") as image:
+            img = image.read()
+        # import cv2
 
-            if x == 0:
-                continue
-            b = b.split()
-            if len(b) == 12:
-                #         print(b)
-                x, y, w, h, text = int(b[6]), int(
-                    b[7]), int(b[8]), int(b[9]), b[11]
-                t[i] = [x, y, w, h, text]
-                i += 1
-        df = {'x': [], 'y': [], 'w': [], 'h': [], 'values': []}
-        for x in t.values():
-            #     print(x)
-            df['x'].append(x[0])
-            df['y'].append(x[1])
-            df['w'].append(x[2])
-            df['h'].append(x[3])
-            x_ = str(x[4]).replace('''"""''', '''"'"''')
-            df['values'].append(x_)
+        # im = cv2.imread(x)
+
+        # is_success, im_buf_arr = cv2.imencode(".jpg")
+        # byte_im = im_buf_arr.tobytes()
+
+        # img = open(x).read()
+        boxes = consumeVision(img)
+        i = 0
+        df = processData(boxes)
         df_list[n] = df
-    file.filedetail = df_list
+    file.filedetail = str(df_list)
     file.save()
     return JsonResponse(data=[settings.TEMP_URL, file_list1], safe=False)
 
