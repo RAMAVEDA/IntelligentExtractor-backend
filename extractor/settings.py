@@ -14,6 +14,7 @@ from google.oauth2 import service_account
 import environ
 import os
 
+
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -27,7 +28,7 @@ SECRET_KEY = '@@*9cqwylqf$dqyud7*_=3rjese5g@8gatrjlsb#ua03uu*v&w'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['test-github-315318.df.r.appspot.com','localhost','127.0.0.1']
+ALLOWED_HOSTS = ['test-github-315318.df.r.appspot.com','localhost','127.0.0.1','intelligentextractor.de.r.appspot.com','34.136.15.141:8080']
 
 
 # Application definition
@@ -141,15 +142,27 @@ TEMP_URL = '/media/'
 # )
 
 # STATICFILES_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
+# env = environ.Env()
 
+# environ.Env.read_env()
 
-GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-    "extractor-314607-cc9a92774562.json"
-)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]=env('API_KEYS')
 
+# client = storage.Client.from_service_account_json(
+#     json_credentials_path=env('API_KEYS'))
+
+# bucket = client.get_bucket(env('BUCKET'))
+
+# GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
+#     env('API_KEYS')
+# )
+
+# DEFAULT_FILE_STORAGE = 'extractor.gcloud.GoogleCloudMediaFileStorage'
+# STATICFILES_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
+# GS_BUCKET_ID = 'extractor-314607'
 DEFAULT_FILE_STORAGE = 'extractor.gcloud.GoogleCloudMediaFileStorage'
-GS_BUCKET_ID = 'extractor-314607'
-GS_BUCKET_NAME = 'extractor_s1'
+STATICFILES_STORAGE = 'extractor.gcloud.GoogleCloudMediaFileStorage'
+GS_BUCKET_NAME = env('BUCKET')
 MEDIA_ROOT = 'Upload'
 UPLOAD_ROOT = 'Extract'
 MEDIA_URL = 'https://storage.googleapis.com/{}/'.format(GS_BUCKET_NAME)

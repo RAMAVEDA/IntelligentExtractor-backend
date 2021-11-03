@@ -15,16 +15,16 @@ environ.Env.read_env()
 os.environ['EMAIL_API_KEY'] = env('EMAIL_KEY')
 
 
-def emailTrigger(model, filepath, filename):
+def emailTrigger(model, data, filename, email):
     message = Mail(
     from_email='interltester@gmail.com',
-    to_emails='shakthiprakash1509@gmail.com',
+    to_emails=email,
     subject='Extraction Results for ' + model,
     html_content="Please find the attachments of extraction results for " + model)
 
-    with open(filepath, 'rb') as f:
-        data = f.read()
-        f.close()
+    # with open(filepath, 'rb') as f:
+    #     data = f.read()
+    #     f.close()
     encoded_file = base64.b64encode(data).decode()
 
     

@@ -12,19 +12,17 @@ environ.Env.read_env()
 client = storage.Client.from_service_account_json(
     json_credentials_path=env('API_KEYS'))
 
-bucket = client.get_bucket('extractor_s1')
+bucket = client.get_bucket(env('BUCKET'))
 
 
-def gcupload_Excel(file):
+def gcupload_Excel(file,data):
     object_name_in_gcs_bucket = bucket.blob(
-        '/Outputs_excel/'+str(datetime.datetime.now()).split()[0]+os.path.basename(file))
-    object_name_in_gcs_bucket.upload_from_filename(file)
+        'Outputs_excel/'+str(datetime.datetime.now()).split()[0]+'/'+os.path.basename(file))
+    object_name_in_gcs_bucket.upload_from_string(data)
 
 
 def gcdownload(from_path, to_path):
-
     object_name_in_gcs_bucket = bucket.blob(from_path)
-
     object_name_in_gcs_bucket.download_to_filename(to_path)
 
 

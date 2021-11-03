@@ -23,12 +23,12 @@ class ExtractFIle(models.Model):
 
 
 class File(models.Model):
-    def directory(self, instance):
-        print(
-            'Upload/{0}_folder/{1}'.format(self.filename[:-4], self.filename))
-        return 'Upload/{0}_folder/{1}'.format(self.filename[:-4], self.filename)
+    # def directory(self, instance):
+    #     print(
+    #         'Upload/{0}_folder/{1}'.format(self.filename[:-4], self.filename))
+    #     return 'Upload/{0}_folder/{1}'.format(self.filename[:-4], self.filename)
     filename = models.CharField(max_length=100)
-    file = models.FileField(upload_to=directory, null=True, blank=True)
+    # file = models.FileField(upload_to=directory, null=True, blank=True)
     eachfile = models.TextField(blank=True)
     modelname = models.CharField(max_length=200, blank=True)
     filedetail = models.TextField(blank=True)
@@ -42,6 +42,8 @@ class Document(models.Model):
     modelname = models.CharField(max_length=100)
     modeltype = models.CharField(max_length=100)
     id = models.ObjectIdField()
+    fieldcount = models.IntegerField(default=0)
+    finished = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return str(self.modelname)
@@ -62,8 +64,9 @@ class Field(models.Model):
 class User(models.Model):
     username = models.CharField(max_length=100)
     password = models.CharField(max_length=100)
-    firstname = models.CharField(max_length=100)
-    lastname = models.CharField(max_length=100)
+    firstname = models.CharField(max_length=100,blank=True)
+    lastname = models.CharField(max_length=100,blank=True)
+    email = models.CharField(max_length=100,blank=True)
 
     def __str__(self) -> str:
         return str(self.username)

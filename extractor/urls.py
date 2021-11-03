@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('user', views.user),
     path('user/<username>/<password>', views.user_detail),
+    path('model_field',views.model_field),
     path('model', views.model),
     path('model/<modelname>', views.model_detail),
     path('field', views.field),
@@ -34,4 +35,4 @@ urlpatterns = [
     path('extractValesAll', views.extractValesAll)
 
 
-]+static(settings.TEMP_URL, document_root=settings.TEMP_ROOT1)
+]+static(settings.MEDIA_ROOT, document_root=settings.MEDIA_ROOT)

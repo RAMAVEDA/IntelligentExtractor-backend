@@ -1,19 +1,23 @@
-# import environ
+import environ
+import datetime
 # from django.db.models.base import Model
 # from django.http import HttpResponse
 from django.http.response import JsonResponse
+from io import StringIO
 # from multiprocessing import Pool
 # from rest_framework import request
 from MongoDB.visionControl import consumeVision
+from MongoDB.signedURL import generate_signed_url
 import shutil
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, status
 from MongoDB.serializers import ExtractSerializer, UserSerializer, ModelSerializer, FieldSerializer
 from MongoDB.models import User, Document, Field, File, ExtractFIle
-from MongoDB.bucketControl import gcdownload, gcupload, gcdownload_str, gcupload_Excel, gcdownload_byt
+from MongoDB.bucketControl import  gcupload, gcupload_Excel, gcdownload_byt
 from MongoDB.sendEmail import emailTrigger
-import pdf2image,io
+
+import pdf2image
 from django.conf import settings
 import os
 import uuid
@@ -21,15 +25,13 @@ import re
 import pandas as pd
 # import bucket
 from collections import defaultdict
-from urllib.parse import urljoin
 
-import smtplib
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
+env = environ.Env()
 
+environ.Env.read_env()
+
+keyAPI = env('API_KEYS')
+bucket = env('BUCKET')
 
 def processData(input):
     def assemble_word(word):
@@ -37,7 +39,6 @@ def processData(input):
         for symbol in word.symbols:
             assembled_word+=symbol.text
         return assembled_word
-
 
     t={}
     i = 0
@@ -61,11 +62,14 @@ def processData(input):
         df['values'].append(x[4])
     return df
 
+
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def savemodel(request):
     coordinates = request.data['coordinate']
     modelname = request.data['modelname']
+    modelid = request.data['modelID']
+    print(modelid,type(modelid))
     success = 0
     for y1 in coordinates.values():
         y = y1
@@ -104,29 +108,35 @@ def savemodel(request):
             print('test', (field))
             success += 1
 
-    def getListOfFiles(dirName):
-            # create a list of file and sub directories 
-            # names in the given directory 
-            listOfFile = os.listdir(dirName)
-            allFiles = list()
-            # Iterate over all the entries
-            for entry in listOfFile:
-                # Create full path
-                fullPath = os.path.join(dirName, entry)
-                # If entry is a directory then get the list of files in this directory 
-                if os.path.isdir(fullPath):
-                    allFiles = allFiles + getListOfFiles(fullPath)
-                else:
-                    allFiles.append(fullPath)
+    # def getListOfFiles(dirName):
+    #         # create a list of file and sub directories 
+    #         # names in the given directory 
+    #         listOfFile = os.listdir(dirName)
+    #         allFiles = list()
+    #         # Iterate over all the entries
+    #         for entry in listOfFile:
+    #             # Create full path
+    #             fullPath = os.path.join(dirName, entry)
+    #             # If entry is a directory then get the list of files in this directory 
+    #             if os.path.isdir(fullPath):
+    #                 allFiles = allFiles + getListOfFiles(fullPath)
+    #             else:
+    #                 allFiles.append(fullPath)
                         
-            return allFiles
-    remove = lambda x:shutil.rmtree(x)
-    for x in getListOfFiles(settings.TEMP_ROOT):
-        print(x)
-        os.remove(x)
-    for x in (os.listdir(settings.TEMP_ROOT)):
-        print(x)
-        remove(os.path.join(settings.TEMP_ROOT,x))
+    #         return allFiles
+    # remove = lambda x:shutil.rmtree(x)
+    # for x in getListOfFiles(settings.TEMP_ROOT):
+    #     print(x)
+    #     os.remove(x)
+    # for x in (os.listdir(settings.TEMP_ROOT)):
+    #     print(x)
+    #     remove(os.path.join(settings.TEMP_ROOT,x))
+    try:
+        snippet = Document.objects.get(id=int(modelid))
+    except Document.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    snippet.finished = True
+    snippet.save()
     return JsonResponse(data="Success " + str(success), safe=False)
 
 
@@ -200,10 +210,8 @@ def text(request):
                                 i_ = i['values'].replace('''"""''', '''"'"''')
                                 print(i_)
                                 text[label].append(
-                                    str({"page": n, "text": i_, "postiton_x":k[1]['x'],"postiton_y":k[1]['y']}))
-        
-    # print(text.items())
-    # text =sorted(text.items(),key=lambda x:(eval(x)['postiton_y'],eval(x)['postiton_x']))
+                                    str({"page": n, "text": i_, "postiton":k[1]['x']}))
+            # print(n, text[label])
     print(text)
     return JsonResponse(data=text, safe=False)
 
@@ -214,10 +222,22 @@ def extractValesAll(request):
     # files = request.data['files']
     model = request.data['modelname']
     filelist = request.data['filelist']
+    print(request.data)
+    user = request.data['user']
+
     try:
         snippet = Field.objects.filter(modelname=model)
     except Field.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        user_details = User.objects.get(username=user)
+    except User.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    user_ = UserSerializer(user_details).data
+
+    email = user_['email']
     t_ = (FieldSerializer(snippet, many=True).data)
     li2 = {}
     page = {}
@@ -296,13 +316,16 @@ def extractValesAll(request):
                                         #     )
                                         # text[label] += ' '+i_
                     text1[str(v2)].append(str(v3))
+    textStream = StringIO()
     print(text1)
     filename_xl = str(uuid.uuid4())+'.csv'
-    pd.DataFrame(text1).to_csv(settings.TEMP_ROOT+'/' + filename_xl)
-    emailTrigger(model, settings.TEMP_ROOT+'/' + filename_xl, model+'.csv')
-    gcupload_Excel(settings.TEMP_ROOT+'/' + filename_xl)
-    os.remove(settings.TEMP_ROOT+'/' + filename_xl)
-    print(text1)
+    pd.DataFrame(text1).to_csv(textStream)
+    
+    gcupload_Excel(filename_xl,textStream.getvalue())
+    x = gcdownload_byt('Outputs_excel/'+str(datetime.datetime.now()).split()[0]+'/'+os.path.basename(filename_xl))
+    emailTrigger(model, x, model+'.csv',email)
+    # os.remove(settings.TEMP_ROOT+'/' + filename_xl)
+    # print(text1)
     return Response(data=filename_xl)
     # return Response(text)
 
@@ -342,7 +365,7 @@ def upload(request):
     print(request)
     file = File(
         filename=str(uuid.uuid4())+str(request.FILES['file'].name)[-4:],
-        file=request.FILES['file'],
+        # file=request.FILES['file'],
         modelname=request.data['modelname']
     )
     file.save()
@@ -350,48 +373,39 @@ def upload(request):
     file_list = []
     file_list1 = []
     
-    path = (settings.MEDIA_ROOT+'/' + str(
-        file.filename)[:-4]+'_folder'+'/'+file.filename)
+    # path = (settings.MEDIA_ROOT+'/' + str(
+        # file.filename)[:-4]+'_folder'+'/'+file.filename)
     
     # os.mkdir(settings.TEMP_ROOT+'/'+str(
     #     file.filename)[:-4]+'_folder')
-    byte = gcdownload_byt(path)
-    img = pdf2image.convert_from_bytes(byte)
-    path = os.path.join(
-        settings.TEMP_ROOT + '\\'+str(file.filename)[:-4]+'_folder'+'\\'+file.filename)
-    if not os.path.isdir(path[:-4]):
-        os.makedirs(path[:-4])
+    # byte = gcdownload_byt(path)
+    img = pdf2image.convert_from_bytes(request.FILES['file'].read())
+    # path = os.path.join(
+    #     settings.TEMP_ROOT + '\\'+str(file.filename)[:-4]+'_folder'+'\\'+file.filename)
+    # if not os.path.isdir(path[:-4]):
+    #     os.makedirs(path[:-4])
     for n, i in enumerate(img):
-        print(path[:-4])
-        i.save(path[:-4]+'_'+str(n)+'.jpg', 'JPEG')
+        # print(path[:-4])
+        # i.save(path[:-4]+'_'+str(n)+'.jpg', 'JPEG')
         gcupload(settings.MEDIA_ROOT+'/'+str(file.filename)[
             :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg', i)
         file_list.append(str(file.filename)[
                          :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg')
-        file_list1.append(path[:-4]+'_'+str(n)+'.jpg')
+
+        file_list1.append(generate_signed_url(keyAPI,bucket,settings.MEDIA_ROOT+'/'+str(file.filename)[
+            :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg'))
     file.eachfile = file_list
     df_list = {}
 
-    for n, x in enumerate(file_list1):
-        # img = gcdownload_byt(settings.MEDIA_ROOT+'/'+x)
-        with open(x, "rb") as image:
-            img = image.read()
-        # import cv2
-
-        # im = cv2.imread(x)
-
-        # is_success, im_buf_arr = cv2.imencode(".jpg")
-        # byte_im = im_buf_arr.tobytes()
-
-        # img = open(x).read()
+    for n, x in enumerate(file_list):
+        img = gcdownload_byt(settings.MEDIA_ROOT+'/'+x)
         boxes = consumeVision(img)
         i = 0
         df = processData(boxes)
         df_list[n] = df
     file.filedetail = str(df_list)
     file.save()
-    return JsonResponse(data=[settings.TEMP_URL, file_list1], safe=False)
-
+    return JsonResponse(data=file_list1, safe=False)
 
 @ api_view(['GET', 'PUT', 'DELETE'])
 @ permission_classes((permissions.AllowAny,))
@@ -420,17 +434,29 @@ def user_detail(request, username, password):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-@ api_view(['GET', 'POST'])
+@ api_view(['GET', 'POST', 'PUT'])
 @ permission_classes((permissions.AllowAny,))
 def user(request):
     if request.method == 'POST':
+        try:
+            usernames = User.objects.filter(username=request.data['username']).exists()
+            if usernames:
+                return Response("Username already exist")
+        except:
+            pass
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            return Response('success')
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if request.method == 'PUT':
+        snippet = User.objects.get(username = request.data['username'])
     usernames = User.objects.all()
     tutorials_serializer = UserSerializer(usernames, many=True)
+    data = {}
+    for x in tutorials_serializer.data:
+        del x['password']
+    print(tutorials_serializer.data)
     return JsonResponse(tutorials_serializer.data, safe=False)
 
 
@@ -463,20 +489,43 @@ def model_detail(request, modelname):
 
 @ api_view(['GET', 'POST'])
 @ permission_classes((permissions.AllowAny,))
+def model_field(request):
+    print(request.data)
+    ret = model1(request.data['modeldetails'])
+    for x in request.data['fielddetails']:
+        print(x)
+        field(x)
+    print(ret)
+    return Response(ret)
+
+
+def model1(request):
+    serializer = ModelSerializer(data=request)
+    if serializer.is_valid():
+        serializer.save()
+        return (serializer.data['id'])
+
+
+@ api_view(['GET', 'POST','DELETE'])
+@ permission_classes((permissions.AllowAny,))
 def model(request):
     if request.method == 'POST':
         serializer = ModelSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            return (serializer.data['id'])
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if request.method == 'DELETE':
+        serializer = Document.objects.filter(modelname=request.data['modelname'])
+        serializer.delete()
+        return Response('success')
     docs = Document.objects.all()
     model_serializer = ModelSerializer(docs, many=True)
     data = [x for x in model_serializer.data]
     return JsonResponse((data), safe=False)
 
 
-@ api_view(['GET', 'PUT', 'DELETE'])
+@ api_view(['GET', 'POST', 'DELETE'])
 @ permission_classes((permissions.AllowAny,))
 def field_detail(request, modelname):
     """
@@ -489,6 +538,10 @@ def field_detail(request, modelname):
         return JsonResponse(serializer.data, safe=False)
 
     elif request.method == 'DELETE':
+        try:
+            sni = File.objects.filter(modelname=modelname).delete()
+        except:
+            pass
         snippet = Field.objects.filter(modelname=modelname)
         snippet.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -505,17 +558,10 @@ def field_detail(request, modelname):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-@ api_view(['GET', 'POST'])
-@ permission_classes((permissions.AllowAny,))
 def field(request):
-    if request.method == 'POST':
-        print(request.data)
-        serializer = FieldSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    fields = Field.objects.all()
-    field_serializer = FieldSerializer(fields, many=True)
-    return JsonResponse(field_serializer.data, safe=False)
+    
+    print(request)
+    serializer = FieldSerializer(data=request)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)

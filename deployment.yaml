@@ -1,0 +1,40 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: intelbackend
+  labels:
+    app: intelbackend
+spec:
+  selector:
+    matchLabels:
+      app: intelbackend
+  replicas: 1
+  template:
+    metadata:
+      labels: 
+        app: intelbackend
+    spec:
+      containers:
+      - name: intelbackend
+        image: python-be
+        ports: 
+        - containerPort: 8080
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name:  intelbackend
+  labels:
+    app: intelbackend
+spec:
+  ports:
+  - nodePort: 30501
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: intelbackend
+  type: LoadBalancer
+
