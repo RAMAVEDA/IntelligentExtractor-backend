@@ -413,8 +413,10 @@ def user_detail(request, username, password):
     """
     Retrieve, update or delete a code snippet.
     """
+    
     try:
         snippet = User.objects.get(username=username, password=password)
+        
     except User.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 

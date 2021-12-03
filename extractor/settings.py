@@ -28,7 +28,7 @@ SECRET_KEY = '@@*9cqwylqf$dqyud7*_=3rjese5g@8gatrjlsb#ua03uu*v&w'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['test-github-315318.df.r.appspot.com','localhost','127.0.0.1','intelligentextractor.de.r.appspot.com','34.136.15.141:8080']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition

@@ -6,7 +6,7 @@ chardet
 click
 cloudstorage
 cmake
-Django
+Django==3.1.7
 django-cors-headers
 django-environ
 django-mongodb-engine
@@ -56,7 +56,7 @@ pyasn1
 pyasn1-modules
 pycparser
 pykwalify
-pymongo
+pymongo==3.12.1
 pyparsing
 pytesseract
 python-box
@@ -73,7 +73,7 @@ six
 smmap
 soupsieve
 spython
-sqlparse
+sqlparse==0.2.4
 unicorn
 uritemplate
 urllib3
