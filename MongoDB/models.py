@@ -1,8 +1,4 @@
-# from django.db import models
 from djongo import models
-# from django_mongodb_engine.storage import GridFSStorage
-# from djongo.storage import Gr
-# Create your models here.
 
 
 class ExtractFIle(models.Model):
@@ -17,18 +13,14 @@ class ExtractFIle(models.Model):
     coordinates = models.TextField(blank=True)
     eachfile = models.TextField(blank=True)
     originalname = models.CharField(max_length=200, blank=True)
+    id = models.ObjectIdField()
 
     def __str__(self) -> str:
         return str(self.fieldextract)
 
 
 class File(models.Model):
-    # def directory(self, instance):
-    #     print(
-    #         'Upload/{0}_folder/{1}'.format(self.filename[:-4], self.filename))
-    #     return 'Upload/{0}_folder/{1}'.format(self.filename[:-4], self.filename)
     filename = models.CharField(max_length=100)
-    # file = models.FileField(upload_to=directory, null=True, blank=True)
     eachfile = models.TextField(blank=True)
     modelname = models.CharField(max_length=200, blank=True)
     filedetail = models.TextField(blank=True)
