@@ -1,11 +1,9 @@
 from azure.cognitiveservices.vision.computervision import ComputerVisionClient
 from msrest.authentication import CognitiveServicesCredentials
-import time
+import time,os
 
-# region = os.environ['ACCOUNT_REGION']
-# key = os.environ['ACCOUNT_KEY']
-key = "144e87a649a849d0812dff38fbed311b"
-region ="eastus"
+region = os.environ['ACCOUNT_REGION']
+key = os.environ['ACCOUNT_KEY_VISION']
 
 credentials = CognitiveServicesCredentials(key)
 client = ComputerVisionClient(
@@ -21,5 +19,4 @@ def consumeVision(image_paths):
     idLocation = len(operationLocation) - numberOfCharsInOperationId
     operationId = operationLocation[idLocation:]
     r = client.get_read_result(operationId)
-
     return r.analyze_result
