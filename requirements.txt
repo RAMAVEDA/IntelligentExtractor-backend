@@ -4,7 +4,6 @@ certifi
 cffi
 chardet
 click
-cloudstorage
 cmake
 Django==3.1.7
 django-cors-headers
@@ -21,18 +20,6 @@ docopt
 environ
 gitdb
 GitPython
-google-api-core
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-cloud
-google-cloud-core
-google-cloud-storage
-google-cloud-vision
-google-crc32c
-google-oauth2-tool
-google-resumable-media
-googleapis-common-protos
 grpcio
 gunicorn
 httplib2
@@ -79,4 +66,5 @@ uritemplate
 urllib3
 webapp2
 websocket-client
-sendgrid
+azure-cognitiveservices-vision-computervision
+azure-storage-blob

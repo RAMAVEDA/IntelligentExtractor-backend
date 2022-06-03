@@ -1,29 +1,21 @@
-import environ
+import environ,io
 import datetime
-# from django.db.models.base import Model
-# from django.http import HttpResponse
 from django.http.response import JsonResponse
 from io import StringIO
-# from multiprocessing import Pool
-# from rest_framework import request
-from MongoDB.visionControl import consumeVision
+from MongoDB.msvisionControl import consumeVision
 from MongoDB.signedURL import generate_signed_url
-import shutil
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions, status
 from MongoDB.serializers import ExtractSerializer, UserSerializer, ModelSerializer, FieldSerializer
 from MongoDB.models import User, Document, Field, File, ExtractFIle
-from MongoDB.bucketControl import  gcupload, gcupload_Excel, gcdownload_byt
-from MongoDB.sendEmail import emailTrigger
+from MongoDB.msbucketControl import  msupload, upload_Excel, download_byt
 
 import pdf2image
 from django.conf import settings
-import os
 import uuid
 import re
 import pandas as pd
-# import bucket
 from collections import defaultdict
 
 env = environ.Env()
@@ -33,28 +25,23 @@ environ.Env.read_env()
 keyAPI = env('API_KEYS')
 bucket = env('BUCKET')
 
-def processData(input):
-    def assemble_word(word):
-        assembled_word=""
-        for symbol in word.symbols:
-            assembled_word+=symbol.text
-        return assembled_word
-
-    t={}
-    i = 0
-    for x in input.pages:
-        for x1 in x.blocks:
-            for x2 in x1.paragraphs:
-                for x3 in x2.words: 
-                    word = assemble_word(x3)
-                    ver = x3.bounding_box.vertices
-                    x1,y1,x2,y2=min(ver[0].x,ver[3].x),min(ver[0].y,ver[1].y),min(ver[1].x,ver[2].x),min(ver[2].y,ver[3].y)
-                    t[i] = [x1,y1,x2-x1,y2-y1,word]
-                    i = i + 1
+def processData(input):   
     
+    t={}           
+    print(input)
+    def get_values_ms():
+        i = 0 
+        for x in input.read_results:
+            for line in x.lines:
+                for word in line.words:
+                    # for character in word.characters:
+                    ver = word.bounding_box
+                    x1,y1,x2,y2=ver[0],ver[1],ver[2],ver[3]
+                    t[i] = [x1,y1,x2-x1,y2-y1,word.text]
+                    i = i + 1
+    get_values_ms()
     df = {'x':[],'y':[],'w':[],'h':[],'values':[]}
     for x in t.values():
-    #     print(x)
         df['x'].append(x[0])
         df['y'].append(x[1])
         df['w'].append(x[2])
@@ -96,47 +83,16 @@ def savemodel(request):
                 snippet = Field.objects.filter(modelname=model)
             except Field.DoesNotExist:
                 return Response(status=status.HTTP_404_NOT_FOUND)
-            # t_ = (FieldSerializer(snippet, many=True).data)
-            # print("savemodel", t_)
-            field = Field.objects.get(modelname=modelname, fieldname=label)
-            # for x in t_:
-            #     print('print', x)
-
-            #     x.fieldcoor = [page, li2]
-            field.fieldcoor = [page, li2]
-            field.save()
+            field1 = Field.objects.filter(modelname=modelname, fieldname=label).update(fieldcoor=[page, li2])         
+            # snippet.save()
             print('test', (field))
             success += 1
-
-    # def getListOfFiles(dirName):
-    #         # create a list of file and sub directories 
-    #         # names in the given directory 
-    #         listOfFile = os.listdir(dirName)
-    #         allFiles = list()
-    #         # Iterate over all the entries
-    #         for entry in listOfFile:
-    #             # Create full path
-    #             fullPath = os.path.join(dirName, entry)
-    #             # If entry is a directory then get the list of files in this directory 
-    #             if os.path.isdir(fullPath):
-    #                 allFiles = allFiles + getListOfFiles(fullPath)
-    #             else:
-    #                 allFiles.append(fullPath)
-                        
-    #         return allFiles
-    # remove = lambda x:shutil.rmtree(x)
-    # for x in getListOfFiles(settings.TEMP_ROOT):
-    #     print(x)
-    #     os.remove(x)
-    # for x in (os.listdir(settings.TEMP_ROOT)):
-    #     print(x)
-    #     remove(os.path.join(settings.TEMP_ROOT,x))
     try:
-        snippet = Document.objects.get(id=int(modelid))
+        snippet = Document.objects.filter(modelname=(modelname))
     except Document.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    snippet.finished = True
-    snippet.save()
+    snippet.update(finished= True)
+    
     return JsonResponse(data="Success " + str(success), safe=False)
 
 
@@ -149,7 +105,6 @@ def text(request):
     detail = re.sub("'", '"', file.filedetail)
     detail = re.sub('''"""''', '"', detail)
     detail = detail.replace('""', ''''"''')
-    # print(detail)
     df1_list = {}
     
     print(eval(detail))
@@ -157,7 +112,6 @@ def text(request):
         df = x
         df1 = pd.DataFrame(df)
         df1_list[str(n+1)] = df1
-        # print(df1.columns)
     print('check',df1_list)
     text = {}
 
@@ -242,6 +196,7 @@ def extractValesAll(request):
     li2 = {}
     page = {}
     for x in t_:
+        print(x)
         li1 = eval(x['fieldcoor'])
         page[x['fieldname']] = li1[0][0]
         li2[x['fieldname']] = li1[1]
@@ -256,13 +211,13 @@ def extractValesAll(request):
 
         a = (ExtractSerializer(snippet, many=True))
         for x__ in a.data:
+            print(x__)
             x_ = eval(x__['eachfile'])
             filename = x__['originalname']
             text1['File name'].append(
                 str(filename))
             for n, x2 in enumerate(x_):
-                img = gcdownload_byt(settings.UPLOAD_ROOT+'/'+x2)
-                # img = cv2.imdecode(img, cv2.COLOR_BGR2RGB)
+                img= generate_signed_url(settings.UPLOAD_ROOT+'/'+x2)
                 boxes = consumeVision(img)
                 i = 0
                 df1 = processData(boxes)
@@ -307,27 +262,16 @@ def extractValesAll(request):
                                             break
                                         i_ = i['values'].replace(
                                             '''"""''', '''"'"''')
-                                        # text1['File name'].append(
-                                        #     str(filename))
-                                        # text1[str(label)].append(str(i_))
-
                                         v3 += ' '+i_
-                                        # text1['Extracted value'].append(
-                                        #     )
-                                        # text[label] += ' '+i_
                     text1[str(v2)].append(str(v3))
     textStream = StringIO()
     print(text1)
     filename_xl = str(uuid.uuid4())+'.csv'
     pd.DataFrame(text1).to_csv(textStream)
     
-    gcupload_Excel(filename_xl,textStream.getvalue())
-    x = gcdownload_byt('Outputs_excel/'+str(datetime.datetime.now()).split()[0]+'/'+os.path.basename(filename_xl))
-    emailTrigger(model, x, model+'.csv',email)
-    # os.remove(settings.TEMP_ROOT+'/' + filename_xl)
-    # print(text1)
-    return Response(data=filename_xl)
-    # return Response(text)
+    upload_Excel(filename_xl,textStream.getvalue())
+    tempUrl = generate_signed_url('Outputs_excel/'+str(datetime.datetime.now()).split()[0]+'/'+ filename_xl)
+    return Response(data=tempUrl)
 
 
 @ api_view(['POST'])
@@ -338,19 +282,24 @@ def uploadfiles(request):
     # print(file['name'])
     extract = ExtractFIle(
         filename=str(uuid.uuid4())+str(request.FILES['file'].name)[-4:],
-        file=file,
+        # file=file,
         modelname=request.data['modelname'],
         originalname=originalname
     )
-    extract.save()
-    file_list = []
-    byte = gcdownload_byt(settings.UPLOAD_ROOT+'/'+str(
+    # extract.save()
+    file_list = []  
+    msupload(settings.UPLOAD_ROOT+'/'+str(extract.filename)[
+        :-4]+'_folder'+'/'+extract.filename, file)
+    byte = download_byt(settings.UPLOAD_ROOT+'/'+str(
         extract.filename)[:-4]+'_folder'+'/'+extract.filename)
     img = pdf2image.convert_from_bytes(byte)
     for n, i in enumerate(img):
         # print(filename_img)
-        gcupload(settings.UPLOAD_ROOT+'/'+str(extract.filename)[
-            :-4]+'_folder'+'/'+extract.filename[:-4]+'_'+str(n)+'.jpg', i)
+        img_byte_arr = io.BytesIO()
+        i.save(img_byte_arr, format='JPEG')
+        img_byte_arr = img_byte_arr.getvalue()        
+        msupload(settings.UPLOAD_ROOT+'/'+str(extract.filename)[
+            :-4]+'_folder'+'/'+extract.filename[:-4]+'_'+str(n)+'.jpg', img_byte_arr)
         file_list.append(str(extract.filename)[
                          :-4]+'_folder'+'/'+extract.filename[:-4]+'_'+str(n)+'.jpg')
     extract.eachfile = file_list
@@ -365,40 +314,30 @@ def upload(request):
     print(request)
     file = File(
         filename=str(uuid.uuid4())+str(request.FILES['file'].name)[-4:],
-        # file=request.FILES['file'],
         modelname=request.data['modelname']
     )
-    file.save()
+    # file.save()
     # print(file.filename)
     file_list = []
     file_list1 = []
     
-    # path = (settings.MEDIA_ROOT+'/' + str(
-        # file.filename)[:-4]+'_folder'+'/'+file.filename)
-    
-    # os.mkdir(settings.TEMP_ROOT+'/'+str(
-    #     file.filename)[:-4]+'_folder')
-    # byte = gcdownload_byt(path)
     img = pdf2image.convert_from_bytes(request.FILES['file'].read())
-    # path = os.path.join(
-    #     settings.TEMP_ROOT + '\\'+str(file.filename)[:-4]+'_folder'+'\\'+file.filename)
-    # if not os.path.isdir(path[:-4]):
-    #     os.makedirs(path[:-4])
     for n, i in enumerate(img):
-        # print(path[:-4])
-        # i.save(path[:-4]+'_'+str(n)+'.jpg', 'JPEG')
-        gcupload(settings.MEDIA_ROOT+'/'+str(file.filename)[
-            :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg', i)
+        img_byte_arr = io.BytesIO()
+        i.save(img_byte_arr, format='JPEG')
+        img_byte_arr = img_byte_arr.getvalue()        
+        msupload(settings.MEDIA_ROOT+'/'+str(file.filename)[
+            :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg', img_byte_arr)
         file_list.append(str(file.filename)[
                          :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg')
 
-        file_list1.append(generate_signed_url(keyAPI,bucket,settings.MEDIA_ROOT+'/'+str(file.filename)[
+        file_list1.append(generate_signed_url(settings.MEDIA_ROOT+'/'+str(file.filename)[
             :-4]+'_folder'+'/'+file.filename[:-4]+'_'+str(n)+'.jpg'))
     file.eachfile = file_list
     df_list = {}
 
     for n, x in enumerate(file_list):
-        img = gcdownload_byt(settings.MEDIA_ROOT+'/'+x)
+        img= generate_signed_url(settings.MEDIA_ROOT+'/'+x)
         boxes = consumeVision(img)
         i = 0
         df = processData(boxes)

@@ -10,7 +10,6 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.0/ref/settings/
 """
 
-from google.oauth2 import service_account
 import environ
 import os
 
@@ -82,21 +81,24 @@ env = environ.Env()
 
 environ.Env.read_env()
 
-# Database
-# https://docs.djangoproject.com/en/3.0/ref/settings/#databases
 
 DATABASES = {
     'default': {
         'ENGINE': 'djongo',
+        'ENFORCE_SCHEMA': False,
         'NAME': env('NAME'),
         'CLIENT': {
-            'host': env('HOST'),
-        }
-    }
+            'host': env('HOST_COSMOS'),
+            'port': 10255,
+            'username': env('USERNAME_COSMOS'),
+            'password': env('PASSWORD_COSMOS'),
+            'authMechanism': 'SCRAM-SHA-1',
+            'ssl': True,
+            'tlsAllowInvalidCertificates': True,
+            'retryWrites': False
+        }   
+    }   
 }
-
-# Password validation
-# https://docs.djangoproject.com/en/3.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -137,29 +139,9 @@ MEDIA_URL = '/tmp/'
 TEMP_ROOT = os.path.join(BASE_DIR, 'media')
 TEMP_ROOT1 = 'media'
 TEMP_URL = '/media/'
-# STATICFILES_DIRS = (
-#     os.path.join(BASE_DIR, 'static'),
-# )
-
-# STATICFILES_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
-# env = environ.Env()
-
-# environ.Env.read_env()
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]=env('API_KEYS')
 
-# client = storage.Client.from_service_account_json(
-#     json_credentials_path=env('API_KEYS'))
-
-# bucket = client.get_bucket(env('BUCKET'))
-
-# GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-#     env('API_KEYS')
-# )
-
-# DEFAULT_FILE_STORAGE = 'extractor.gcloud.GoogleCloudMediaFileStorage'
-# STATICFILES_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
-# GS_BUCKET_ID = 'extractor-314607'
 DEFAULT_FILE_STORAGE = 'extractor.gcloud.GoogleCloudMediaFileStorage'
 STATICFILES_STORAGE = 'extractor.gcloud.GoogleCloudMediaFileStorage'
 GS_BUCKET_NAME = env('BUCKET')
