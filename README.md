@@ -5,7 +5,7 @@ A Low-Code/No-Code based Product which is scalable (hosted on Azure Kubernetes w
 
 ## Deployment
 
-To deploy this project run
+To deploy this project follow below instructions.
 
 ### Required Azure Services for deployment
 
