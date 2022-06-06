@@ -9,15 +9,15 @@ To deploy this project follow below instructions.
 
 ### Required Azure Services for deployment
 
-- Azure blob storage
-- Azure computer vision
-- Azure cosmos DB
-- Azure container registry
-- Azure kubernetes cluster 
+- Azure Blob storage
+- Azure Computer Vision
+- Azure Cosmos DB API for MongoDB
+- Azure container registry/DockerHub
+- Azure Kubernetes cluster 
 
-### Conifugration changes
+### Configuration changes
 
-.env file avialble inside extractor/
+.env file available inside extractor/
 
 - Create a Azure blob storage with blob and add BLOB_NAME, CONNECTION_STRING, ACCOUNT_NAME and ACCOUNT_KEY to .env file 
   ```bash
