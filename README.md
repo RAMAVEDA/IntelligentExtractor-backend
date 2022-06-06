@@ -8,6 +8,7 @@ A Low-Code/No-Code based Product which is scalable (hosted on Azure Kubernetes w
 To deploy this project run
 
 ### Required Azure Services for deployment
+
 - Azure blob storage
 - Azure computer vision
 - Azure cosmos DB
@@ -38,6 +39,7 @@ To deploy this project run
   ```
 
 ### Deployment steps
+
   ```bash
     git clone https://github.com/RAMAVEDA/IntelligentExtractor-backend.git
     cd IntelligentExtractor-backend
